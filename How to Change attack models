@@ -1,0 +1,95 @@
+File to edit: models.py
+
+The engine uses two base classes:
+class HonestModel(BaseModel): pass
+class AttackerModel(BaseModel): pass
+
+But the behavior is controlled in run_demo.py, not the model class itself.
+
+
+Make a Model Always Attack
+
+You can force a model to always produce bad signatures:
+
+model = AttackerModel("attacker_0")
+event = model.make_event(store, "payload", cheat=True)
+
+or change every call in Phase 2:
+
+attack = attacker.make_event(store, f"atk-{i}", cheat=True)
+
+Make a “Chaotic” Model (sometimes cheats, sometimes honest)
+
+Add this in run_demo.py:
+
+import random
+
+def maybe_cheat(p=0.3):
+    return random.random() < p
+
+Then generate events like:
+
+
+event = chaotic_model.make_event(store, f"chaos-{i}", cheat=maybe_cheat(0.3))
+
+
+Make a “Drifter” Model (lies with timestamps)
+
+In models.py, override the timestamp logic:
+
+class DrifterModel(BaseModel):
+    def make_event(self, store, payload, cheat=False):
+        ev = super().make_event(store, payload, cheat)
+        # artificially drift time forward or backward
+        ev.ts += random.randint(-3, 3)
+        return ev
+
+This intentionally breaks monotonicity — the controller will catch it.
+
+Make a “Payload-Liar” (claims output it never computed)
+
+Everything in PoCI is anchored by:
+
+payload_commit = BLAKE2b(payload)
+
+To simulate lying about the payload:
+
+event = liar.make_event(store, "real payload")
+event.payload = "fake payload"
+
+The controller will detect mismatched commitments.
+
+Make a “Shadow Attacker” (copies someone else’s prev_hash)
+
+event.prev_hash = honest.prev_hash
+
+This breaks lineage — watch the controller slam its weight.
+
+Adjust Trust Sensitivity
+
+In controller.py, change these:
+
+self.weight += 30   # reward for GOOD
+self.weight -= 60   # penalty for BAD
+self.theta  -= 4    # reward
+self.theta  += 4    # penalty
+
+
+Lower values = forgiving
+Higher values = brutal
+
+Number of Events per Phase
+
+In run_demo.py:
+
+BOOTSTRAP_EVENTS = 6
+ATTACK_EVENTS = 12
+
+Change those to anything you want.
+
+Want multiple attackers or multiple honest models?
+
+honest2 = HonestModel("honest_b")
+attacker2 = AttackerModel("atk_b")
+
+
